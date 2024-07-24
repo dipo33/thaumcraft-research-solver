@@ -1,3 +1,6 @@
+use std::collections::HashMap;
+
+use nbt::{Blob, Value};
 use strsim::normalized_levenshtein;
 
 #[derive(Debug, PartialEq, Eq, Hash, Clone, Copy)]
@@ -155,6 +158,62 @@ impl Aspect {
             Some((best_match.unwrap(), highest_score))
         } else {
             None
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct AspectInventory {
+    inventory: HashMap<Aspect, u16>,
+}
+
+impl AspectInventory {
+    pub fn amount_of(&self, aspect: Aspect) -> u16 {
+        self.inventory.get(&aspect).copied().unwrap_or(0)
+    }
+
+    pub fn from_nbt(nbt: Blob) -> Result<AspectInventory, String> {
+        let aspect_values = match nbt.get("THAUMCRAFT.ASPECTS") {
+            Some(nbt::Value::List(aspects)) => aspects,
+            _ => return Err("The NBT structure does not contain a valid list of ThaumCraft aspects".to_string()),
+        };
+
+        let mut inventory = HashMap::new();
+        for aspect_value in aspect_values {
+            let (aspect, amount) = AspectInventory::parse_aspect(aspect_value)?;
+            inventory.insert(aspect, amount);
+        }
+
+        Ok(AspectInventory { inventory })
+    }
+
+    fn parse_aspect(aspect: &Value) -> Result<(Aspect, u16), String> {
+        if let Value::Compound(aspect_data) = aspect {
+            let aspect_key = aspect_data
+                .get("key")
+                .and_then(|v| match v {
+                    Value::String(s) => Some(s),
+                    _ => None,
+                })
+                .ok_or_else(|| "Aspect key is missing or not a string".to_string())?;
+
+            let aspect_amount: u16 = aspect_data
+                .get("amount")
+                .and_then(|v| match v {
+                    Value::Short(amount) => Some(*amount),
+                    _ => None,
+                })
+                .ok_or_else(|| "Aspect amount is missing or not a short".to_string())?
+                .try_into()
+                .map_err(|_| "Aspect amount is negative".to_string())?;
+
+            if let Some((aspect, 1.0)) = Aspect::from_str_fuzzy(&aspect_key) {
+                Ok((aspect, aspect_amount))
+            } else {
+                Err(format!("Aspect inventory contains unknown aspect '{}'.", aspect_key))
+            }
+        } else {
+            Err("Aspect inventory contains unexpected NBT element.".to_string())
         }
     }
 }

@@ -1,12 +1,12 @@
 mod aspect;
 
-use aspect::Aspect;
+use aspect::{Aspect, AspectInventory};
 use clap::Parser;
 use ftp::FtpStream;
-use nbt::{Blob, Value};
+use nbt::Blob;
 use std::{
     collections::{HashMap, HashSet, VecDeque},
-    io::{Cursor, Read},
+    io::Cursor,
 };
 
 /// Thaumcraft Research Solver using weighted paths with your actual aspect inventory
@@ -34,12 +34,12 @@ struct Args {
 struct Graph {
     // Maps each node to a list of (neighbor, weight) pairs
     edges: HashMap<Aspect, HashSet<Aspect>>,
-    aspect_inv: HashMap<Aspect, i16>,
+    aspect_inventory: AspectInventory,
 }
 
 impl Graph {
     // Initialize the graph with static data
-    fn new(aspect_inv: HashMap<Aspect, i16>) -> Self {
+    fn new(aspect_inventory: AspectInventory) -> Self {
         let mut edges = HashMap::new();
         Graph::add_composite(&mut edges, Aspect::Alienis, Aspect::Vacuos, Aspect::Tenebrae);
         Graph::add_composite(&mut edges, Aspect::Arbor, Aspect::Aer, Aspect::Herba);
@@ -99,11 +99,14 @@ impl Graph {
         Graph::add_composite(&mut edges, Aspect::Vitreus, Aspect::Terra, Aspect::Ordo);
         Graph::add_composite(&mut edges, Aspect::Volatus, Aspect::Aer, Aspect::Motus);
 
-        Graph { edges, aspect_inv }
+        Graph {
+            edges,
+            aspect_inventory,
+        }
     }
 
     fn get_price_of(&self, aspect: Aspect) -> f64 {
-        let amount = self.aspect_inv.get(&aspect).unwrap_or(&0).to_owned();
+        let amount = self.aspect_inventory.amount_of(aspect);
         if amount == 0 {
             return f64::MAX;
         }
@@ -229,47 +232,6 @@ fn find_aspect(msg: &str) -> Aspect {
     aspect.unwrap()
 }
 
-fn read_aspect(aspect: &Value) -> (Aspect, i16) {
-    if let Value::Compound(aspect) = aspect {
-        let aspect_key = aspect.get("key");
-        let aspect_amount = aspect.get("amount");
-
-        match (aspect_key, aspect_amount) {
-            (Some(Value::String(key)), Some(Value::Short(amount))) => {
-                if let Some((aspect, 1.0)) = Aspect::from_str_fuzzy(key) {
-                    (aspect, amount.to_owned())
-                } else {
-                    panic!("Aspect inventory contains unknown aspect '{}'.", key);
-                }
-            }
-            _ => {
-                panic!("Aspect inventory does not contain expected data.");
-            }
-        }
-    } else {
-        panic!("Aspect inventory contains unexpected NBT element.");
-    }
-}
-
-fn parse_aspect_inventory<R>(file: &mut R) -> HashMap<Aspect, i16>
-where
-    R: Read,
-{
-    let mut aspects = HashMap::new();
-    let blob: Blob = Blob::from_gzip_reader(file).unwrap();
-    match blob.get("THAUMCRAFT.ASPECTS") {
-        Some(Value::List(owned_aspects)) => {
-            for owned_aspect in owned_aspects {
-                let (aspect, amount) = read_aspect(owned_aspect);
-                aspects.insert(aspect, amount);
-            }
-        }
-        _ => {}
-    }
-
-    aspects
-}
-
 fn download_aspect_inventory_from_ftp(args: &Args) -> Cursor<Vec<u8>> {
     let mut ftp_stream = FtpStream::connect(args.ftp_address.as_str()).expect("Should connect to FTP");
     let _ = ftp_stream
@@ -343,9 +305,10 @@ fn main_loop(graph: &Graph) {
 
 fn main() {
     let args = Args::parse();
-    let mut aspect_inv_file = download_aspect_inventory_from_ftp(&args);
-    let aspect_inv = parse_aspect_inventory(&mut aspect_inv_file);
-    let graph = Graph::new(aspect_inv);
+    let mut aspect_inventory_file = download_aspect_inventory_from_ftp(&args);
+    let blob = Blob::from_gzip_reader(&mut aspect_inventory_file).unwrap();
+    let aspect_inventory = AspectInventory::from_nbt(blob).unwrap();
+    let graph = Graph::new(aspect_inventory);
 
     loop {
         main_loop(&graph);
