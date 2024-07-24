@@ -6,7 +6,7 @@ use ftp::FtpStream;
 use nbt::{Blob, Value};
 use std::{
     collections::{HashMap, HashSet, VecDeque},
-    io::Read,
+    io::{Cursor, Read},
 };
 
 /// Thaumcraft Research Solver using weighted paths with your actual aspect inventory
@@ -251,7 +251,7 @@ fn read_aspect(aspect: &Value) -> (Aspect, i16) {
     }
 }
 
-fn read_aspect_inventory<R>(file: &mut R) -> HashMap<Aspect, i16>
+fn parse_aspect_inventory<R>(file: &mut R) -> HashMap<Aspect, i16>
 where
     R: Read,
 {
@@ -270,16 +270,15 @@ where
     aspects
 }
 
-fn download_aspect_inventory(args: &Args) -> HashMap<Aspect, i16> {
+fn download_aspect_inventory_from_ftp(args: &Args) -> Cursor<Vec<u8>> {
     let mut ftp_stream = FtpStream::connect(args.ftp_address.as_str()).expect("Should connect to FTP");
     let _ = ftp_stream
         .login(args.ftp_username.as_str(), args.ftp_password.as_str())
         .expect("Should login to FTP");
-    let mut reader = ftp_stream
-        .simple_retr(format!("/World/playerdata/{}.thaum", args.username).as_str())
-        .expect("Should retrieve thaum file from FTP");
 
-    read_aspect_inventory(&mut reader)
+    ftp_stream
+        .simple_retr(format!("/World/playerdata/{}.thaum", args.username).as_str())
+        .expect("Should retrieve thaum file from FTP")
 }
 
 fn main_loop(graph: &Graph) {
@@ -344,7 +343,8 @@ fn main_loop(graph: &Graph) {
 
 fn main() {
     let args = Args::parse();
-    let aspect_inv = download_aspect_inventory(&args);
+    let mut aspect_inv_file = download_aspect_inventory_from_ftp(&args);
+    let aspect_inv = parse_aspect_inventory(&mut aspect_inv_file);
     let graph = Graph::new(aspect_inv);
 
     loop {
