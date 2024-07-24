@@ -4,3 +4,8 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
+strsim = "0.11.1"
+hematite-nbt = "0.5.2"
+serde_json = "1.0.120"
+ftp = "3.0.1"
+clap = { version = "4.5.9", features = ["derive"] }
