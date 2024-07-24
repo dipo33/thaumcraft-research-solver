@@ -7,7 +7,7 @@ use std::{
 };
 use strsim::normalized_levenshtein;
 
-/// Thauncraft Research Solver using weighted paths with your actual aspect inventory
+/// Thaumcraft Research Solver using weighted paths with your actual aspect inventory
 #[derive(Parser, Debug)]
 #[command(version, about, long_about = None)]
 struct Args {
