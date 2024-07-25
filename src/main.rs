@@ -9,23 +9,23 @@ use std::{
     io::Cursor,
 };
 
-/// Thaumcraft Research Solver using weighted paths with your actual aspect inventory
+/// ThaumCraft Research Solver using weighted paths with your actual aspect inventory
 #[derive(Parser, Debug)]
 #[command(version, about, long_about = None)]
 struct Args {
-    /// Actual Minecraft username
+    /// Actual MineCraft username
     #[arg(short, long)]
     username: String,
 
-    /// Minecraft server FTP address
+    /// MineCraft server FTP address
     #[arg(short = 'a', long)]
     ftp_address: String,
 
-    /// Minecraft server FTP username
+    /// MineCraft server FTP username
     #[arg(short, long)]
     ftp_username: String,
 
-    /// Minecraft server FTP password
+    /// MineCraft server FTP password
     #[arg(short = 'p', long)]
     ftp_password: String,
 }
