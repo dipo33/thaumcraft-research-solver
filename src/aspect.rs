@@ -165,6 +165,7 @@ impl Aspect {
 #[derive(Debug, Clone)]
 pub struct AspectInventory {
     inventory: HashMap<Aspect, u16>,
+    max_amount: u16,
 }
 
 impl AspectInventory {
@@ -184,7 +185,18 @@ impl AspectInventory {
             inventory.insert(aspect, amount);
         }
 
-        Ok(AspectInventory { inventory })
+        let max_amount = inventory.values().cloned().max().unwrap_or_default();
+
+        Ok(AspectInventory { inventory, max_amount })
+    }
+
+    pub fn price_of(&self, aspect: Aspect) -> u16 {
+        let amount = self.amount_of(aspect);
+        if amount == 0 {
+            u16::MAX
+        } else {
+            self.max_amount + 1 - amount
+        }
     }
 
     fn parse_aspect(aspect: &Value) -> Result<(Aspect, u16), String> {
