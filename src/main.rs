@@ -7,7 +7,7 @@ use clap::Parser;
 use ftp::FtpStream;
 use nbt::Blob;
 use solver::Solver;
-use std::io::Cursor;
+use std::{cmp::min, io::Cursor};
 
 /// ThaumCraft Research Solver using weighted paths with your actual aspect inventory
 #[derive(Parser, Debug)]
@@ -78,6 +78,31 @@ fn find_aspect(msg: &str) -> Aspect {
     aspect.unwrap()
 }
 
+fn read_u8(msg: &str, max: u8) -> u8 {
+    use std::io::{self, Write};
+
+    let mut value_str = String::new();
+    let mut value: Option<u8> = None;
+    while value.is_none() {
+        value_str.clear();
+
+        print!("{}", msg);
+        io::stdout().flush().unwrap();
+        io::stdin().read_line(&mut value_str).unwrap();
+        value_str = value_str.trim().to_string();
+
+        value = match value_str.parse() {
+            Ok(value) if value <= max => Some(value),
+            _ => {
+                print!("'{}' is not a valid integer between 0 and {}! ", value_str, max);
+                None
+            }
+        }
+    }
+
+    value.unwrap()
+}
+
 fn download_aspect_inventory_from_ftp(args: &Args) -> Cursor<Vec<u8>> {
     let mut ftp_stream = FtpStream::connect(args.ftp_address.as_str()).expect("Should connect to FTP");
     let _ = ftp_stream.login(args.ftp_username.as_str(), args.ftp_password.as_str()).expect("Should login to FTP");
@@ -88,18 +113,11 @@ fn download_aspect_inventory_from_ftp(args: &Args) -> Cursor<Vec<u8>> {
 }
 
 fn main_loop(solver: &Solver) {
-    use std::io::{self, Write};
     let aspect_a = find_aspect("Enter the first aspect: ");
     let aspect_b = find_aspect("Enter the second aspect: ");
 
-    let mut distance_str = String::new();
-    print!("Enter the minimal distance between the two aspects: ");
-    io::stdout().flush().unwrap();
-    io::stdin().read_line(&mut distance_str).unwrap();
-
-    let max_distance_increase = 5;
-    let mut target_distance: u8 = distance_str.trim().parse().expect("Please enter a valid number");
-    target_distance += 2;
+    let target_distance: u8 = read_u8("Enter the minimal distance between the two aspects: ", 8) + 2;
+    let max_distance_increase = min(12 - target_distance, 3);
 
     println!("\n");
 
