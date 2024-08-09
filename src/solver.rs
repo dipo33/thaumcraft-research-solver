@@ -47,14 +47,18 @@ impl Solver {
             path: vec![start],
         });
 
+        let end_price = self.aspect_inventory.price_of(end) as u32;
         while let Some(SolverState { node, price, distance, path }) = queue.pop_front() {
             if distance == desired_distance {
-                if node == end && price <= lowest_price {
-                    if price < lowest_price {
-                        paths.clear();
-                        lowest_price = price;
+                if node == end {
+                    let price = price - end_price;
+                    if price <= lowest_price {
+                        if price < lowest_price {
+                            paths.clear();
+                            lowest_price = price;
+                        }
+                        paths.push(path.clone());
                     }
-                    paths.push(path.clone());
                 }
                 continue;
             }
