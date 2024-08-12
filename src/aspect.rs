@@ -20,6 +20,7 @@ pub enum Aspect {
     Fabrico,
     Fames,
     Gelum,
+    Gloria,
     Gula,
     Herba,
     Humanus,
@@ -48,6 +49,7 @@ pub enum Aspect {
     Permutatio,
     Potentia,
     Praecantatio,
+    Primordium,
     Radio,
     Sano,
     Sensus,
@@ -72,7 +74,7 @@ pub enum Aspect {
 
 impl Aspect {
     fn values() -> &'static [Aspect] {
-        static VALUES: [Aspect; 63] = [
+        static VALUES: [Aspect; 65] = [
             Aspect::Aer,
             Aspect::Alienis,
             Aspect::Aqua,
@@ -88,6 +90,7 @@ impl Aspect {
             Aspect::Fabrico,
             Aspect::Fames,
             Aspect::Gelum,
+            Aspect::Gloria,
             Aspect::Gula,
             Aspect::Herba,
             Aspect::Humanus,
@@ -116,6 +119,7 @@ impl Aspect {
             Aspect::Permutatio,
             Aspect::Potentia,
             Aspect::Praecantatio,
+            Aspect::Primordium,
             Aspect::Radio,
             Aspect::Sano,
             Aspect::Sensus,
@@ -140,12 +144,34 @@ impl Aspect {
         &VALUES
     }
 
+    pub fn display_name(&self) -> String {
+        format!("{:?}", self).to_lowercase()
+    }
+
+    pub fn key(&self) -> String {
+        match self {
+            Aspect::Primordium => "custom3".to_string(),
+            Aspect::Gloria => "custom5".to_string(),
+            _ => self.display_name(),
+        }
+    }
+
+    pub fn get_by_key(name: &String) -> Option<Aspect> {
+        for variant in Aspect::values().iter() {
+            if variant.key().eq_ignore_ascii_case(name) {
+                return Some(variant.clone());
+            }
+        }
+
+        None
+    }
+
     pub fn from_str_fuzzy(name: &String) -> Option<(Aspect, f64)> {
         let mut highest_score = 0.0;
         let mut best_match = None;
 
         for variant in Aspect::values().iter() {
-            let variant_name = format!("{:?}", variant).to_lowercase();
+            let variant_name = variant.display_name();
             let input_name = name.to_lowercase();
             let score = normalized_levenshtein(&variant_name, &input_name);
 
@@ -219,13 +245,13 @@ impl AspectInventory {
                 .try_into()
                 .map_err(|_| "Aspect amount is negative".to_string())?;
 
-            if let Some((aspect, 1.0)) = Aspect::from_str_fuzzy(&aspect_key) {
+            if let Some(aspect) = Aspect::get_by_key(&aspect_key) {
                 Ok((aspect, aspect_amount))
             } else {
-                Err(format!("Aspect inventory contains unknown aspect '{}'.", aspect_key))
+                Err(format!("Aspect inventory contains unknown aspect '{}'", aspect_key))
             }
         } else {
-            Err("Aspect inventory contains unexpected NBT element.".to_string())
+            Err("Aspect inventory contains unexpected NBT element".to_string())
         }
     }
 }
