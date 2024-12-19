@@ -5,10 +5,12 @@ use strsim::normalized_levenshtein;
 
 #[derive(Debug, PartialEq, Eq, Hash, Clone, Copy)]
 pub enum Aspect {
+    Aequalitas,
     Aer,
     Alienis,
     Aqua,
     Arbor,
+    Astrum,
     Auram,
     Bestia,
     Caelum,
@@ -61,10 +63,12 @@ pub enum Aspect {
     Tempestas,
     Tempus,
     Tenebrae,
+    Terminus,
     Terra,
     Tutamen,
     Vacuos,
     Venenum,
+    Vesania,
     Victus,
     Vinculum,
     Vitium,
@@ -74,11 +78,13 @@ pub enum Aspect {
 
 impl Aspect {
     fn values() -> &'static [Aspect] {
-        static VALUES: [Aspect; 65] = [
+        static VALUES: [Aspect; 69] = [
+            Aspect::Aequalitas,
             Aspect::Aer,
             Aspect::Alienis,
             Aspect::Aqua,
             Aspect::Arbor,
+            Aspect::Astrum,
             Aspect::Auram,
             Aspect::Bestia,
             Aspect::Caelum,
@@ -131,11 +137,13 @@ impl Aspect {
             Aspect::Tempestas,
             Aspect::Tempus,
             Aspect::Tenebrae,
+            Aspect::Terminus,
             Aspect::Terra,
             Aspect::Tutamen,
             Aspect::Vacuos,
             Aspect::Venenum,
             Aspect::Victus,
+            Aspect::Vesania,
             Aspect::Vinculum,
             Aspect::Vitium,
             Aspect::Vitreus,
@@ -150,7 +158,10 @@ impl Aspect {
 
     pub fn key(&self) -> String {
         match self {
+            Aspect::Aequalitas => "custom1".to_string(),
+            Aspect::Vesania => "custom2".to_string(),
             Aspect::Primordium => "custom3".to_string(),
+            Aspect::Astrum => "custom4".to_string(),
             Aspect::Gloria => "custom5".to_string(),
             _ => self.display_name(),
         }

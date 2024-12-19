@@ -122,6 +122,7 @@ fn main_loop(solver: &Solver) {
     println!("\n");
 
     let best_paths = solver.find_paths(aspect_a, aspect_b, target_distance, max_distance_increase);
+
     let mut shortest_price: Option<u32> = None;
     for increase in 0..max_distance_increase {
         let paths = best_paths.get(&increase);
