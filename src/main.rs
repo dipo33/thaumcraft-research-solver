@@ -3,7 +3,7 @@ mod graph;
 mod solver;
 
 use aspect::{Aspect, AspectInventory};
-use clap::Parser;
+use clap::{Args as ClapArgs, Parser, Subcommand};
 use ftp::FtpStream;
 use nbt::Blob;
 use solver::Solver;
@@ -11,23 +11,38 @@ use std::{cmp::min, io::Cursor};
 
 /// ThaumCraft Research Solver using weighted paths with your actual aspect inventory
 #[derive(Parser, Debug)]
-#[command(version, about, long_about = None)]
+#[command(version, about)]
 struct Args {
-    /// Actual MineCraft username
+    #[command(subcommand)]
+    mode: Mode,
+}
+
+#[derive(ClapArgs, Debug)]
+struct FtpConfig {
+    /// Actual Minecraft username
     #[arg(short, long)]
     username: String,
 
-    /// MineCraft server FTP address
+    /// Minecraft server FTP address
     #[arg(short = 'a', long)]
     ftp_address: String,
 
-    /// MineCraft server FTP username
+    /// Minecraft server FTP username
     #[arg(short, long)]
     ftp_username: String,
 
-    /// MineCraft server FTP password
+    /// Minecraft server FTP password
     #[arg(short = 'p', long)]
     ftp_password: String,
+}
+
+#[derive(Subcommand, Debug)]
+enum Mode {
+    /// Use FTP to connect to the server
+    Ftp(FtpConfig),
+
+    /// Run without FTP
+    Simple,
 }
 
 fn yes_or_no() -> bool {
@@ -103,12 +118,12 @@ fn read_u8(msg: &str, max: u8) -> u8 {
     value.unwrap()
 }
 
-fn download_aspect_inventory_from_ftp(args: &Args) -> Cursor<Vec<u8>> {
-    let mut ftp_stream = FtpStream::connect(args.ftp_address.as_str()).expect("Should connect to FTP");
-    let _ = ftp_stream.login(args.ftp_username.as_str(), args.ftp_password.as_str()).expect("Should login to FTP");
+fn download_aspect_inventory_from_ftp(config: &FtpConfig) -> Cursor<Vec<u8>> {
+    let mut ftp_stream = FtpStream::connect(config.ftp_address.as_str()).expect("Should connect to FTP");
+    let _ = ftp_stream.login(config.ftp_username.as_str(), config.ftp_password.as_str()).expect("Should login to FTP");
 
     ftp_stream
-        .simple_retr(format!("/World/playerdata/{}.thaum", args.username).as_str())
+        .simple_retr(format!("/World/playerdata/{}.thaum", config.username).as_str())
         .expect("Should retrieve thaum file from FTP")
 }
 
@@ -150,9 +165,14 @@ fn main_loop(solver: &Solver) {
 
 fn main() {
     let args = Args::parse();
-    let mut aspect_inventory_file = download_aspect_inventory_from_ftp(&args);
-    let blob = Blob::from_gzip_reader(&mut aspect_inventory_file).unwrap();
-    let aspect_inventory = AspectInventory::from_nbt(blob).unwrap();
+    let aspect_inventory = match args.mode {
+        Mode::Ftp(ftp_config) => {
+            let mut aspect_inventory_file = download_aspect_inventory_from_ftp(&ftp_config);
+            let blob = Blob::from_gzip_reader(&mut aspect_inventory_file).unwrap();
+            AspectInventory::from_nbt(blob).unwrap()
+        }
+        Mode::Simple => AspectInventory::default(),
+    };
     let solver = Solver::new(aspect_inventory);
 
     loop {

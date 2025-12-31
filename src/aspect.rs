@@ -205,6 +205,17 @@ pub struct AspectInventory {
     max_amount: u16,
 }
 
+impl Default for AspectInventory {
+    fn default() -> Self {
+        let mut inventory = HashMap::new();
+        for aspect in Aspect::values() {
+            inventory.insert(aspect.clone(), 100);
+        }
+
+        Self { inventory, max_amount: 100 }
+    }
+}
+
 impl AspectInventory {
     pub fn amount_of(&self, aspect: Aspect) -> u16 {
         self.inventory.get(&aspect).copied().unwrap_or(0)
