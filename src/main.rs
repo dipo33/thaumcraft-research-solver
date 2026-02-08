@@ -2,12 +2,21 @@ mod aspect;
 mod graph;
 mod solver;
 
+use anyhow::{anyhow, Context, Result};
 use aspect::{Aspect, AspectInventory};
 use clap::{Args as ClapArgs, Parser, Subcommand};
 use ftp::FtpStream;
 use nbt::Blob;
 use solver::Solver;
-use std::{cmp::min, io::Cursor};
+use ssh2::Session;
+use ssh2_config::{HostParams, ParseRule, SshConfig};
+use std::fs::File;
+use std::io::{BufReader, Cursor, Read};
+use std::net::TcpStream;
+use std::{
+    cmp::min,
+    path::{Path, PathBuf},
+};
 
 /// ThaumCraft Research Solver using weighted paths with your actual aspect inventory
 #[derive(Parser, Debug)]
@@ -36,10 +45,24 @@ struct FtpConfig {
     ftp_password: String,
 }
 
+#[derive(ClapArgs, Debug)]
+pub struct SshConfigRef {
+    /// Actual Minecraft username
+    #[arg(short, long)]
+    username: String,
+
+    /// Host alias in ~/.ssh/config, e.g. "nuremberg"
+    #[arg(short = 'a', long)]
+    pub host_alias: String,
+}
+
 #[derive(Subcommand, Debug)]
 enum Mode {
     /// Use FTP to connect to the server
     Ftp(FtpConfig),
+
+    /// Use SSH to connect to the server
+    Ssh(SshConfigRef),
 
     /// Run without FTP
     Simple,
@@ -57,6 +80,99 @@ fn yes_or_no() -> bool {
         }
         Err(error) => panic!("Error reading input: {}", error),
     }
+}
+
+fn expand_tilde(p: &Path) -> Result<PathBuf> {
+    // ssh2-config yields PathBufs; if the key is "~/.ssh/id_ed25519", libssh2 won’t expand it for you.
+    let s = p.to_string_lossy();
+    if let Some(rest) = s.strip_prefix("~/") {
+        let home = dirs::home_dir().context("Unable to determine home directory")?;
+        Ok(home.join(rest))
+    } else {
+        Ok(p.to_path_buf())
+    }
+}
+
+pub fn download_aspect_inventory_from_ssh(cfg: &SshConfigRef) -> Result<Cursor<Vec<u8>>> {
+    let ssh_cfg = load_user_ssh_config(ParseRule::STRICT)?;
+    let params = resolve_host_params(&ssh_cfg, &cfg.host_alias);
+
+    let mut session = connect_ssh_session(&params, &cfg.host_alias)?;
+    authenticate_session(&mut session, &params)?;
+
+    let remote_path = remote_thaum_path(&cfg.username);
+    sftp_read_to_cursor(&session, &remote_path)
+}
+
+fn load_user_ssh_config(rules: ParseRule) -> Result<SshConfig> {
+    let path = default_ssh_config_path()?;
+    let file = File::open(&path).with_context(|| format!("Failed to open {:?}", path))?;
+    let mut reader = BufReader::new(file);
+
+    // This matches ssh2-config’s API and documentation examples. :contentReference[oaicite:2]{index=2}
+    let cfg = SshConfig::default()
+        .parse(&mut reader, rules)
+        .with_context(|| format!("Failed to parse SSH config {:?}", path))?;
+
+    Ok(cfg)
+}
+
+fn default_ssh_config_path() -> Result<PathBuf> {
+    let home = dirs::home_dir().context("Unable to determine home directory")?;
+    Ok(home.join(".ssh").join("config"))
+}
+
+fn resolve_host_params<'a>(cfg: &'a SshConfig, alias: &str) -> HostParams {
+    // Per docs: if no rule matches, defaults are returned. :contentReference[oaicite:3]{index=3}
+    cfg.query(alias)
+}
+
+fn connect_ssh_session(params: &HostParams, alias_fallback: &str) -> Result<Session> {
+    let hostname = params.host_name.clone().unwrap_or_else(|| alias_fallback.to_string());
+
+    let port: u16 = params.port.unwrap_or(22) as u16;
+    let addr = format!("{}:{}", hostname, port);
+
+    let tcp = TcpStream::connect(&addr).with_context(|| format!("Failed to connect to {}", addr))?;
+
+    let mut sess = Session::new().context("Failed to create SSH session")?;
+    sess.set_tcp_stream(tcp);
+    sess.handshake().context("SSH handshake failed")?;
+
+    Ok(sess)
+}
+
+fn authenticate_session(session: &mut Session, params: &HostParams) -> Result<()> {
+    let user = params.user.as_deref().ok_or_else(|| anyhow!("No `User` resolved from SSH config for this host"))?;
+
+    // 1) Prefer agent (common when you use ssh config aliases)
+    if session.userauth_agent(user).is_ok() && session.authenticated() {
+        return Ok(());
+    }
+
+    // 2) Fall back to IdentityFile list, as shown in ssh2-config docs. :contentReference[oaicite:4]{index=4}
+    for identity_file in params.identity_file.clone().unwrap_or_default().iter() {
+        let identity_file = expand_tilde(identity_file)?;
+        if session.userauth_pubkey_file(user, None, &identity_file, None).is_ok() && session.authenticated() {
+            return Ok(());
+        }
+    }
+
+    Err(anyhow!("SSH authentication failed (agent and IdentityFile fallback both failed)"))
+}
+
+fn remote_thaum_path(mc_username: &str) -> String {
+    format!("/opt/gtnh/gtnh_server/World/playerdata/{}.thaum", mc_username)
+}
+
+fn sftp_read_to_cursor(session: &Session, remote_path: &str) -> Result<Cursor<Vec<u8>>> {
+    let sftp = session.sftp().context("Failed to create SFTP session")?;
+    let mut file = sftp.open(remote_path).with_context(|| format!("Failed to open remote file {}", remote_path))?;
+
+    let mut buf = Vec::new();
+    file.read_to_end(&mut buf).with_context(|| format!("Failed to read remote file {}", remote_path))?;
+
+    Ok(Cursor::new(buf))
 }
 
 fn find_aspect(msg: &str) -> Aspect {
@@ -168,6 +284,11 @@ fn main() {
     let aspect_inventory = match args.mode {
         Mode::Ftp(ftp_config) => {
             let mut aspect_inventory_file = download_aspect_inventory_from_ftp(&ftp_config);
+            let blob = Blob::from_gzip_reader(&mut aspect_inventory_file).unwrap();
+            AspectInventory::from_nbt(blob).unwrap()
+        }
+        Mode::Ssh(ssh_config) => {
+            let mut aspect_inventory_file = download_aspect_inventory_from_ssh(&ssh_config).unwrap();
             let blob = Blob::from_gzip_reader(&mut aspect_inventory_file).unwrap();
             AspectInventory::from_nbt(blob).unwrap()
         }
