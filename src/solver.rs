@@ -146,6 +146,7 @@ impl Solver {
         Solver::add_composite_edges(&mut graph, Aspect::Vitium, Aspect::Praecantatio, Aspect::Perditio);
         Solver::add_composite_edges(&mut graph, Aspect::Vitreus, Aspect::Terra, Aspect::Ordo);
         Solver::add_composite_edges(&mut graph, Aspect::Volatus, Aspect::Aer, Aspect::Motus);
+        Solver::add_composite_edges(&mut graph, Aspect::Caelum, Aspect::Vitreus, Aspect::Metallum);
 
         graph
     }
