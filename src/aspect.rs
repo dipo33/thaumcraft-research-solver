@@ -77,7 +77,7 @@ pub enum Aspect {
 }
 
 impl Aspect {
-    fn values() -> &'static [Aspect] {
+    pub fn values() -> &'static [Aspect] {
         static VALUES: [Aspect; 69] = [
             Aspect::Aequalitas,
             Aspect::Aer,
@@ -167,17 +167,17 @@ impl Aspect {
         }
     }
 
-    pub fn get_by_key(name: &String) -> Option<Aspect> {
+    pub fn get_by_key(name: &str) -> Option<Aspect> {
         for variant in Aspect::values().iter() {
             if variant.key().eq_ignore_ascii_case(name) {
-                return Some(variant.clone());
+                return Some(*variant);
             }
         }
 
         None
     }
 
-    pub fn from_str_fuzzy(name: &String) -> Option<(Aspect, f64)> {
+    pub fn from_str_fuzzy(name: &str) -> Option<(Aspect, f64)> {
         let mut highest_score = 0.0;
         let mut best_match = None;
 
@@ -188,14 +188,10 @@ impl Aspect {
 
             if score > highest_score {
                 highest_score = score;
-                best_match = Some(variant.clone());
+                best_match = Some(*variant);
             }
         }
-        if best_match.is_some() {
-            Some((best_match.unwrap(), highest_score))
-        } else {
-            None
-        }
+        best_match.map(|m| (m, highest_score))
     }
 }
 
@@ -209,7 +205,7 @@ impl Default for AspectInventory {
     fn default() -> Self {
         let mut inventory = HashMap::new();
         for aspect in Aspect::values() {
-            inventory.insert(aspect.clone(), 100);
+            inventory.insert(*aspect, 100);
         }
 
         Self { inventory, max_amount: 100 }
@@ -267,7 +263,7 @@ impl AspectInventory {
                 .try_into()
                 .map_err(|_| "Aspect amount is negative".to_string())?;
 
-            if let Some(aspect) = Aspect::get_by_key(&aspect_key) {
+            if let Some(aspect) = Aspect::get_by_key(aspect_key) {
                 Ok((aspect, aspect_amount))
             } else {
                 Err(format!("Aspect inventory contains unknown aspect '{}'", aspect_key))
